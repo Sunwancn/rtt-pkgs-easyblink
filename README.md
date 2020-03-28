@@ -65,12 +65,12 @@ easyblink 的初始化函数，必须的。
 void easyblink(ebled_t led, rt_int16_t nums, rt_uint16_t pulse, rt_uint16_t period)
 ```
 
- **led：**  easyblink_init 后得到的 LED 句柄。 
+ **led：**  easyblink_init 后得到的 LED 句柄。  
  **nums：**  闪烁次数，-1 为一直闪烁。  
  **pulse：**  LED 闪烁时点亮LED的脉冲宽度，以毫秒为单位。  
  **period：**  LED 闪烁周期，亮和暗即一个完整的周期。  
  
- 当前LED正在闪烁时，如果这时LED再调用一次 easyblink()，若当前LED的nums为-1（即一直闪烁），则会打断当前LED的闪烁，先关闭LED 500ms，然后使用新的参数进行闪烁，闪烁好了后，会再关闭LED 5000ms，再恢复原来的LED参数继续闪烁；否则，会保存参数在后备区，等当前的闪烁完了后，接着以新的参数闪烁。关断LED的前后时间可以在 easyblink.h 里调整设置。  
+ 当前LED正在闪烁时，如果这时LED再调用一次 easyblink()，若当前LED的nums为-1（即一直闪烁），则会打断当前LED的闪烁，先关闭LED 500ms，然后使用新的参数进行闪烁，闪烁好了后，会再关闭LED 5000ms，再恢复原来的LED参数继续闪烁，关断LED的前后时间可以在 easyblink.h 里调整设置。否则，会保存参数在后备区，等当前的闪烁完了后，接着以新的参数闪烁。  
  因为只有一个后备区，因此当后备区有待闪烁的参数时，再次调用 easyblink()，原来后备区的参数将丢失，代之于新的参数。
 
 `void easyblink_stop(ebled_t led)`
@@ -94,8 +94,8 @@ Nano 版直接拷贝 easyblink.h 和 easyblink.c 到用户文件夹，然后要�
 
 PKG_EASYBLINK_MAX_LED_NUMS：定义 LED 数目。  
 PKG_EASYBLINK_USING_MSH_CMD：定义可以在控制台使用 eblink 进行LED的闪烁测试。  
-PKG_EASYBLINK_USING_MUTEX：使用互锁，成为线程安全型应用，确保开启 RT_USING_MUTEX 。对只有少量的LED，闪烁频次不是很高，并且都是同一个线程控制的话，觉得不是非常必要。
-PKG_EASYBLINK_USING_HEAP：LED的守护线程栈使用系统的动态堆内存，确保开启 RT_USING_HEAP，否则，在编译时就分配好内存。
+PKG_EASYBLINK_USING_MUTEX：使用互锁，成为线程安全型应用，确保开启 RT_USING_MUTEX 。对只有少量的LED，闪烁频次不是很高，并且都是同一个线程控制的话，觉得不是非常必要。  
+PKG_EASYBLINK_USING_HEAP：LED的守护线程栈使用系统的动态堆内存，确保开启 RT_USING_HEAP，否则，在编译时自动分配好内存。
 
 ## 使用示例
 
