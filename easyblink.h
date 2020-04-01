@@ -12,11 +12,7 @@
 #define __EASYBLINK_H__
 
 #include <rtthread.h>
-#ifdef PKG_USING_EASYBLINK
-#include <board.h>
-#else
 #include <main.h>
-#endif /* PKG_USING_EASYBLINK */
 
 #ifdef __cplusplus
 extern "C" {
