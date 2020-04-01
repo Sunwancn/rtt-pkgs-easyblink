@@ -58,8 +58,8 @@ extern "C" {
 
 struct easyblink_data
 {
-	rt_base_t led_pin;
-	rt_base_t active_level;
+    rt_base_t led_pin;
+    rt_base_t active_level;
     rt_uint16_t flag;
     rt_int16_t nums;
     rt_int16_t nums_bak;
