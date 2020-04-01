@@ -1,12 +1,14 @@
 # easyblink
 
 ## 简介
-小巧轻便的LED控制软件包，可以容易地控制LED开、关、反转和各种间隔闪烁，占用RAM少，可以设置成线程安全型的；不需要移植就可以同时适用 RT-Thread 标准版和 Nano 版。  
+小巧轻便的LED控制软件包，可以容易地控制LED开、关、反转和各种间隔闪烁，占用RAM少，可以设置成线程安全型的；同时提供 RT-Thread 标准版和 Nano 版。  
 
 ## 特点
-和其它LED同类软件相比，easyblink 有一个显著的特点，占用 RAM 特别少，其它 LED 软件一般每一个LED都需要创建一个线程，LED一多，线程数就多了，所占用的栈空间就相应的增大。而 easyblink 始终只使用一个守护线程（线程栈可以是预先分配的静态栈空间），无论多少个 LED，就一个线程。另外，不需要移植就可以同时适用 RT-Thread 标准版和 Nano 版，特别适合 RAM 紧张的产品。同时，也可以设置成线程安全型的。
+和其它LED同类软件相比，easyblink 有一个显著的特点，占用 RAM 特别少，其它 LED 软件一般每一个LED都需要创建一个线程，LED一多，线程数就多了，所占用的栈空间就相应的增大。而 easyblink 始终只使用一个守护线程（线程栈可以是预先分配的静态栈空间），无论多少个 LED，就一个线程。另外，有不需要移植就可以直接使用的 Nano 版，特别适合 RAM 紧张的产品。同时，也可以设置成线程安全型的。
 
 ## 获取软件包
+
+### 标准版：
 
 使用 easyblink 软件包需要在 ENV 环境的包管理中选中它，若没有找到，先使用 `pkgs --upgrade` ，升级本地的包列表，运行 menuconfig 后具体路径如下：
 
@@ -32,11 +34,34 @@ RT-Thread online packages
 |Use mutex to make thread safe|使用互锁，成为线程安全型的应用|
 |Use heap with the easyblink daemon thread stack created|LED守护线程栈使用系统动态堆内存|
 
+### Nano 版：
+[点击进入 Nano 版](/tree/nano/)
+
+Nano 版直接拷贝 easyblink.h 和 easyblink.c 到用户文件夹，然后要确保开启宏 RT_USING_SEMAPHORE，再自己配置几个宏定义：  
+
+|宏|描述|
+|----|----|
+|PKG_EASYBLINK_MAX_LED_NUMS|定义 LED 数目|
+|PKG_EASYBLINK_USING_MSH_CMD|定义可以在控制台使用 eblink 进行LED的闪烁测试|
+|PKG_EASYBLINK_USING_MUTEX|使用互锁，成为线程安全型应用，确保开启 RT_USING_MUTEX 。对只有少量的LED，闪烁频次不是很高，并且都是同一个线程控制的话，觉得不是非常必要。|
+|PKG_EASYBLINK_USING_HEAP|LED的守护线程栈使用系统的动态堆内存，确保开启 RT_USING_HEAP，否则，在编译时就自动分配好内存。|
+
 ## API 简介
+
+`ebled_t easyblink_init_led(rt_base_t rt_pin, rt_base_t active_level)`
+
+easyblink 的初始化函数，每个 LED 使用前必须先初始化，V2.0.0 新增。  
+
+|参数|描述|
+|----|----|
+|rt_pin|LED 驱动引脚编号，查看 PIN 驱动代码 drv_gpio.c 文件确认引脚编号。对 STM32，可以使用GET_PIN()宏，如 GET_PIN(F, 9) 为 PF9|
+|active_level|点亮LED时的端口电平，为 PIN_LOW 或 PIN_HIGH|
+
+函数返回 ebled_t 类型指针，init 次数超过最大LED数目，返回空指针。
 
 `ebled_t easyblink_init(GPIO_TypeDef *port, rt_uint16_t pin, GPIO_PinState active_level)`
 
-easyblink 的初始化函数，必须的。  
+easyblink 的初始化函数，每个 LED 使用前必须先初始化，为了兼容 V1.0.0 而保留的，只支持 STM32 MCU。  
 
 |参数|描述|
 |----|----|
@@ -91,16 +116,6 @@ void easyblink(ebled_t led, rt_int16_t nums, rt_uint16_t pulse, rt_uint16_t peri
 
 翻转 LED 。  
 
-
-Nano 版直接拷贝 easyblink.h 和 easyblink.c 到用户文件夹，然后要确保开启宏 RT_USING_SEMAPHORE，再自己配置几个宏定义：  
-
-|宏|描述|
-|----|----|
-|PKG_EASYBLINK_MAX_LED_NUMS|定义 LED 数目|
-|PKG_EASYBLINK_USING_MSH_CMD|定义可以在控制台使用 eblink 进行LED的闪烁测试|
-|PKG_EASYBLINK_USING_MUTEX|使用互锁，成为线程安全型应用，确保开启 RT_USING_MUTEX 。对只有少量的LED，闪烁频次不是很高，并且都是同一个线程控制的话，觉得不是非常必要。|
-|PKG_EASYBLINK_USING_HEAP|LED的守护线程栈使用系统的动态堆内存，确保开启 RT_USING_HEAP，否则，在编译时就自动分配好内存。|
-
 ## 使用示例
 
 ```
@@ -113,10 +128,10 @@ ebled_t led2 = RT_NULL;
 int main(void)
 {
   ...
-    /* 初始化LED1，引脚B口5脚，低电平有效 */
-    led1 = easyblink_init(GPIOB, GPIO_PIN_5, GPIO_PIN_RESET);
-    /* 初始化LED2，引脚B口3脚，低电平有效 */
-    led2 = easyblink_init(GPIOB, GPIO_PIN_3, GPIO_PIN_RESET);
+    /* 初始化LED1，引脚B口5脚，STM32可以使用GET_PIN()宏，低电平有效 */
+    led1 = easyblink_init_led(GET_PIN(B, 5), PIN_LOW);
+    /* 初始化LED2，引脚B口3脚，STM32可以使用GET_PIN()宏，低电平有效 */
+    led2 = easyblink_init_led(GET_PIN(B, 3), PIN_LOW);
 
 
     /* led1 闪3次，周期1000ms，亮500ms */
