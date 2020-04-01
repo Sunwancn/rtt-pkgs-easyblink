@@ -35,7 +35,7 @@ RT-Thread online packages
 |Use heap with the easyblink daemon thread stack created|LED守护线程栈使用系统动态堆内存|
 
 ### Nano 版：
-[点击进入 Nano 版](/tree/nano/)
+[点击进入 Nano 版](tree/nano/)
 
 Nano 版直接拷贝 easyblink.h 和 easyblink.c 到用户文件夹，然后要确保开启宏 RT_USING_SEMAPHORE，再自己配置几个宏定义：  
 
