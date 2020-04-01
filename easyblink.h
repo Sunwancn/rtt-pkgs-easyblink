@@ -6,17 +6,14 @@
  * Change Logs:
  * Date           Author       Notes
  * 2020-01-15     Sunwancn     the first version
+ * 2020-04-01     Sunwancn     Version 2.0.0
  */
 
 #ifndef __EASYBLINK_H__
 #define __EASYBLINK_H__
 
 #include <rtthread.h>
-#ifdef PKG_USING_EASYBLINK
 #include <board.h>
-#else
-#include <main.h>
-#endif /* PKG_USING_EASYBLINK */
 
 #ifdef __cplusplus
 extern "C" {
@@ -61,9 +58,8 @@ extern "C" {
 
 struct easyblink_data
 {
-    GPIO_TypeDef *port;
-    rt_uint16_t pin;
-    GPIO_PinState active_level;
+	rt_base_t led_pin;
+	rt_base_t active_level;
     rt_uint16_t flag;
     rt_int16_t nums;
     rt_int16_t nums_bak;
@@ -75,7 +71,10 @@ struct easyblink_data
 };
 typedef struct easyblink_data *ebled_t;
 
+#ifdef SOC_FAMILY_STM32
 extern ebled_t easyblink_init(GPIO_TypeDef *port, rt_uint16_t pin, GPIO_PinState active_level);
+#endif
+extern ebled_t easyblink_init_led(rt_base_t rt_pin, rt_base_t active_level);
 extern void easyblink_deinit(ebled_t led);
 extern void easyblink_stop(ebled_t led);
 extern void easyblink(ebled_t led, rt_int16_t nums, rt_uint16_t pulse, rt_uint16_t period);

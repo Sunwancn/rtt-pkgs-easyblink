@@ -6,6 +6,7 @@
  * Change Logs:
  * Date           Author       Notes
  * 2020-01-15     Sunwancn     the first version
+ * 2020-04-01     Sunwancn     Version 2.0.0
  */
 
 #include "easyblink.h"
@@ -34,22 +35,21 @@ static rt_mutex_t eb_mutex = RT_NULL;
 
 static void led_blink_delay(ebled_t led, rt_uint16_t delay);
 static void blink_data_set(ebled_t led, rt_int16_t nums, rt_uint16_t pulse, rt_uint16_t period);
-static void eb_led_set_out_mode(ebled_t led);
 static void eb_daemon_thread_entry(void *parameter);
-static rt_uint32_t correct_or_get_min_ticks(rt_uint32_t tick, rt_bool_t corr);
+static rt_tick_t correct_or_get_min_ticks(rt_tick_t tick, rt_bool_t corr);
 
 /***************************************************************************************************
- * @fn      easyblink_init
+ * @fn      easyblink_init_led
  *
- * @brief   初始化
+ * @brief   初始化 LED
  *
- * @param   port         - GPIOx
- *          pin          - GPIO_PIN_0 - GPIO_PIN_15
- *          active_level - 点亮LED的有效电平，GPIO_PIN_RESET 或 GPIO_PIN_SET
+ * @param   led_pin      - LED 驱动引脚编号，查看 PIN 驱动代码 drv_gpio.c 文件确认引脚编号，
+ *                         对 STM32，可以使用GET_PIN()宏，如 GET_PIN(F, 9) 为 PF9
+ *          active_level - 点亮LED的有效电平，PIN_LOW 或 PIN_HIGH
  *
  * @return  ebled_t类型指针，若 init 次数超出最大LED数目，返回空指针
  ***************************************************************************************************/
-ebled_t easyblink_init(GPIO_TypeDef *port, rt_uint16_t pin, GPIO_PinState active_level)
+ebled_t easyblink_init_led(rt_base_t led_pin, rt_base_t active_level)
 {
     int i;
     ebled_t led = RT_NULL;
@@ -60,12 +60,12 @@ ebled_t easyblink_init(GPIO_TypeDef *port, rt_uint16_t pin, GPIO_PinState active
         if (!__EASYBLINK_IS_FLAG(led, PKG_EASYBLINK_INIT))
         {
             __EASYBLINK_SET_FLAG(led, PKG_EASYBLINK_INIT);
-            led->port = port;
-            led->pin = pin;
+
+            led->led_pin = led_pin;
             led->active_level = active_level;
 
             eb_led_off(led);
-            eb_led_set_out_mode(led);
+            rt_pin_mode(led_pin, PIN_MODE_OUTPUT);
 
             /* 若 easyBlink 守护线程未创建或已关闭，则创建 */
             if (eb_thread == RT_NULL || eb_thread->stat == RT_THREAD_CLOSE)
@@ -107,6 +107,41 @@ ebled_t easyblink_init(GPIO_TypeDef *port, rt_uint16_t pin, GPIO_PinState active
     return led;
 }
 
+#ifdef SOC_FAMILY_STM32
+/***************************************************************************************************
+ * @fn      easyblink_init
+ *
+ * @brief   STM32 初始化 LED
+ *
+ * @param   port         - GPIOx
+ *          pin          - GPIO_PIN_0 - GPIO_PIN_15
+ *          active_level - 点亮LED的有效电平，GPIO_PIN_RESET 或 GPIO_PIN_SET
+ *
+ * @return  ebled_t类型指针，若 init 次数超出最大LED数目，返回空指针
+ ***************************************************************************************************/
+ebled_t easyblink_init(GPIO_TypeDef *port, rt_uint16_t pin, GPIO_PinState active_level)
+{
+    rt_base_t lpin = 0;
+    rt_base_t alevel;
+
+    RT_ASSERT(pin > 0);
+
+    do
+    {
+        if (pin & 1U)
+            break;
+        pin >>= 1;
+        lpin++;
+    }
+    while(lpin < 16);
+
+    lpin += (rt_base_t)(16 * (((rt_base_t)port - (rt_base_t)GPIOA_BASE) / (0x0400UL)));
+    alevel = (rt_base_t)active_level;
+
+    return easyblink_init_led(lpin, alevel);
+}
+#endif /* SOC_FAMILY_STM32 */
+
 /***************************************************************************************************
  * @fn      easyblink_deinit
  *
@@ -122,7 +157,7 @@ void easyblink_deinit(ebled_t led)
 
     RT_ASSERT(led);
 
-    HAL_GPIO_DeInit(led->port, led->pin);
+    rt_pin_mode(led->led_pin, PIN_MODE_INPUT);
 
     rt_memset(led, 0x0, sizeof(struct easyblink_data));
 
@@ -265,88 +300,12 @@ void led_blink_delay(ebled_t led, rt_uint16_t delay)
     rt_sem_release(eb_sem);
 }
 
-/* Set the LED pin OUTPUT_PP mode */
-void eb_led_set_out_mode(ebled_t led)
-{
-    GPIO_InitTypeDef GPIO_InitStruct = {0};
-
-    RT_ASSERT(led);
-
-    switch ((rt_uint32_t)led->port)
-    {
-#ifdef GPIOA
-    case (rt_uint32_t)GPIOA:
-        __HAL_RCC_GPIOA_CLK_ENABLE();
-        break;
-#ifdef GPIOB
-    case (rt_uint32_t)GPIOB:
-        __HAL_RCC_GPIOB_CLK_ENABLE();
-        break;
-#ifdef GPIOC
-    case (rt_uint32_t)GPIOC:
-        __HAL_RCC_GPIOC_CLK_ENABLE();
-        break;
-#ifdef GPIOD
-    case (rt_uint32_t)GPIOD:
-        __HAL_RCC_GPIOD_CLK_ENABLE();
-        break;
-#ifdef GPIOE
-    case (rt_uint32_t)GPIOE:
-        __HAL_RCC_GPIOE_CLK_ENABLE();
-        break;
-#ifdef GPIOF
-    case (rt_uint32_t)GPIOF:
-        __HAL_RCC_GPIOF_CLK_ENABLE();
-        break;
-#ifdef GPIOG
-    case (rt_uint32_t)GPIOG:
-        __HAL_RCC_GPIOG_CLK_ENABLE();
-        break;
-#ifdef GPIOH
-    case (rt_uint32_t)GPIOH:
-        __HAL_RCC_GPIOH_CLK_ENABLE();
-        break;
-#ifdef GPIOI
-    case (rt_uint32_t)GPIOI:
-        __HAL_RCC_GPIOI_CLK_ENABLE();
-        break;
-#ifdef GPIOJ
-    case (rt_uint32_t)GPIOJ:
-        __HAL_RCC_GPIOJ_CLK_ENABLE();
-        break;
-#ifdef GPIOK
-    case (rt_uint32_t)GPIOK:
-        __HAL_RCC_GPIOK_CLK_ENABLE();
-        break;
-#endif /* GPIOK */
-#endif /* GPIOJ */
-#endif /* GPIOI */
-#endif /* GPIOH */
-#endif /* GPIOG */
-#endif /* GPIOF */
-#endif /* GPIOE */
-#endif /* GPIOD */
-#endif /* GPIOC */
-#endif /* GPIOB */
-#endif /* GPIOA */
-    default:
-        return;
-    }
-
-    GPIO_InitStruct.Mode  = GPIO_MODE_OUTPUT_PP;
-    GPIO_InitStruct.Pull  = GPIO_NOPULL;
-    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-
-    GPIO_InitStruct.Pin = led->pin;
-    HAL_GPIO_Init(led->port, &GPIO_InitStruct);
-}
-
 /* LED on */
 void eb_led_on(ebled_t led)
 {
     RT_ASSERT(led);
 
-    HAL_GPIO_WritePin(led->port, led->pin, led->active_level);
+    rt_pin_write(led->led_pin, led->active_level);
 }
 
 /* LED off */
@@ -354,22 +313,32 @@ void eb_led_off(ebled_t led)
 {
     RT_ASSERT(led);
 
-    if (led->active_level == GPIO_PIN_SET)
+    if (led->active_level == PIN_HIGH)
     {
-        HAL_GPIO_WritePin(led->port, led->pin, GPIO_PIN_RESET);
+        rt_pin_write(led->led_pin, PIN_LOW);
     }
     else
     {
-        HAL_GPIO_WritePin(led->port, led->pin, GPIO_PIN_SET);
+        rt_pin_write(led->led_pin, PIN_HIGH);
     }
 }
 
 /* LED toggle */
 void eb_led_toggle(ebled_t led)
 {
+    int level;
+
     RT_ASSERT(led);
 
-    HAL_GPIO_TogglePin(led->port, led->pin);
+    level = rt_pin_read(led->led_pin);
+    if (level == PIN_HIGH)
+    {
+        rt_pin_write(led->led_pin, PIN_LOW);
+    }
+    else
+    {
+        rt_pin_write(led->led_pin, PIN_HIGH);
+    }
 }
 
 /* LED守护线程入口函数 */
@@ -377,7 +346,7 @@ void eb_daemon_thread_entry(void *parameter)
 {
     int i;
     ebled_t led = RT_NULL;
-    rt_uint32_t wait_tick, tick;
+    rt_tick_t wait_tick, tick;
 
     while (1)
     {
@@ -459,7 +428,7 @@ void eb_daemon_thread_entry(void *parameter)
 }
 
 /* 校正其余LED的ticks，并返回最小ticks，当corr为false时，只单纯取最小ticks */
-rt_uint32_t correct_or_get_min_ticks(rt_uint32_t tick, rt_bool_t corr)
+rt_tick_t correct_or_get_min_ticks(rt_tick_t tick, rt_bool_t corr)
 {
     int i;
     ebled_t led = RT_NULL;
@@ -494,7 +463,7 @@ rt_uint32_t correct_or_get_min_ticks(rt_uint32_t tick, rt_bool_t corr)
     rt_mutex_release(eb_mutex);
 #endif
 
-    return (rt_uint32_t)((tick_min < 0) ? 0 : tick_min);
+    return (rt_tick_t)((tick_min < 0) ? 0 : tick_min);
 }
 
 #ifdef PKG_EASYBLINK_USING_MSH_CMD
