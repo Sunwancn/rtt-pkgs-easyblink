@@ -9,8 +9,9 @@
  * 2020-04-01     Sunwancn     Version 2.0.0
  */
 
+#include <rtthread.h>
+#include <rtdevice.h>
 #include "easyblink.h"
-#include <stdlib.h>
 
 #if !defined(PKG_EASYBLINK_MAX_LED_NUMS) || (PKG_EASYBLINK_MAX_LED_NUMS == 0)
 #error "Please define at least one PKG_EASYBLINK_MAX_LED_NUMS"
@@ -466,7 +467,9 @@ rt_tick_t correct_or_get_min_ticks(rt_tick_t tick, rt_bool_t corr)
     return (rt_tick_t)((tick_min < 0) ? 0 : tick_min);
 }
 
-#ifdef PKG_EASYBLINK_USING_MSH_CMD
+#if defined(RT_USING_FINSH) && defined(PKG_EASYBLINK_USING_MSH_CMD)
+#include <stdlib.h>
+
 static void __easyblink(rt_uint8_t argc, char **argv)
 {
     int init_num, nums, pulse, period;
@@ -521,4 +524,4 @@ static void __easyblink(rt_uint8_t argc, char **argv)
     }
 }
 MSH_CMD_EXPORT_ALIAS(__easyblink, eblink, Blink the LED easily);
-#endif /* PKG_EASYBLINK_USING_MSH_CMD */
+#endif /* defined(RT_USING_FINSH) && defined(PKG_EASYBLINK_USING_MSH_CMD) */
