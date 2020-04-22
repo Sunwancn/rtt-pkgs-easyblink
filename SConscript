@@ -7,6 +7,6 @@ src     = Glob('easyblink.c')
 
 CPPPATH = [cwd]
 
-group = DefineGroup('Packages', src, depend = ['PKG_USING_EASYBLINK'], CPPPATH = CPPPATH)
+group = DefineGroup('easyblink', src, depend = ['PKG_USING_EASYBLINK'], CPPPATH = CPPPATH)
 
 Return('group')
