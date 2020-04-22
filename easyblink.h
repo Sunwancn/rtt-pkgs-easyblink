@@ -34,7 +34,7 @@ extern "C" {
 /* 线程栈相关配置 */
 #define PKG_EASYBLINK_THREAD_PRIORITY       (RT_THREAD_PRIORITY_MAX - 2)
 #define PKG_EASYBLINK_THREAD_STACK_SIZE     256
-#define PKG_EASYBLINK_THREAD_TIMESLICE      (RT_TICK_PER_SECOND / 100)  /* 10ms */
+#define PKG_EASYBLINK_THREAD_TIMESLICE      (RT_TICK_PER_SECOND / 20)  /* 50ms */
 
 /* 若在中断中使用 easyblink，并开了互锁，请把宏 PKG_EASYBLINK_WAIT_MUTEX_TICK 设为 0 吧，
  * 漏掉一次不闪就一次不闪吧，只是LED指示，无所谓的，还是中断的实时性重要。*/
