@@ -193,7 +193,7 @@ void easyblink(ebled_t led, rt_int16_t nums, rt_uint16_t pulse, rt_uint16_t peri
     if (rt_mutex_take(eb_mutex, PKG_EASYBLINK_WAIT_MUTEX_TICK) == RT_EOK)
 #endif
     {
-        if (led->nums == -1)
+        if (led->nums == -1 && nums > 0)
         {
             /* 原先若是无限次闪烁，原先的LED闪烁参数压入后备区 */
             led->nums_bak = led->nums;
