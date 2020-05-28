@@ -172,7 +172,7 @@ int main(void)
 |参数|描述|
 |----|----|
 |init_num|从 1 开始的正整数，是按 LED 的 init 初始化顺序排序的|
-|nums|闪烁次数，-1 为一直闪|
+|nums|闪烁次数，大于0的整数|
 |period|周期，默认 1000 毫秒|
 |pulse|点亮 LED 的脉冲宽度，默认为 period 的一半|
 
