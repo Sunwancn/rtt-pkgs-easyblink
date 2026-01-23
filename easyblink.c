@@ -65,8 +65,8 @@ ebled_t easyblink_init_led(rt_base_t led_pin, rt_base_t active_level)
             led->led_pin = led_pin;
             led->active_level = active_level;
 
-            eb_led_off(led);
             rt_pin_mode(led_pin, PIN_MODE_OUTPUT);
+            rt_pin_write(led_pin, !active_level);
 
             /* 若 easyBlink 守护线程未创建或已关闭，则创建 */
             if (eb_thread == RT_NULL || eb_thread->stat == RT_THREAD_CLOSE)
