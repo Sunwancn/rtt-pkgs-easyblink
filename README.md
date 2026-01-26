@@ -1,10 +1,10 @@
 # easyblink
 
 ## 简介
-小巧轻便的LED控制软件包，可以容易地控制LED开、关、反转和各种间隔闪烁，占用RAM少，可以设置成线程安全型的；同时提供 RT-Thread 标准版和 Nano 版。  
+小巧轻便的LED控制软件包，可以容易地控制LED开、关、反转和各种间隔闪烁，占用RAM少。
 
 ## 特点
-和其它LED同类软件相比，easyblink 有一个显著的特点，占用 RAM 特别少，其它 LED 软件一般每一个LED都需要创建一个线程，LED一多，线程数就多了，所占用的栈空间就相应的增大。而 easyblink 始终只使用一个守护线程（线程栈可以是预先分配的静态栈空间），无论多少个 LED，就一个线程。另外，有不需要移植就可以直接使用的 Nano 版，特别适合 RAM 紧张的产品。同时，也可以设置成线程安全型的。
+和其它LED同类软件相比，easyblink 有一个显著的特点，占用 RAM 特别少，其它 LED 软件一般每一个LED都需要创建一个线程，LED一多，线程数就多了，所占用的栈空间就相应的增大。而 easyblink 始终只使用一个守护线程（线程栈可以是预先分配的静态栈空间），无论多少个 LED，就一个线程。另外，只需要简单移植 GPIO 部分组件（rt_pin_mode/rt_pin_read/rt_pin_write），就可以直接使用到 Nano 版，特别适合 RAM 紧张的产品。在 2.1.0 版本及以后，支持直接在中断 ISR 中调用。
 
 ## 获取软件包
 
@@ -27,30 +27,29 @@ RT-Thread online packages
               Version (latest)  --->
 ```
 
-|设置选项|描述|
-|----|----|
+|设置选项|  描述  |
+|-------|--------|
 |Setting the max LED nums|最多可使用的LED数目|
 |Blink led on console to test|可以在控制台控制LED闪烁，进行测试|
-|Use mutex to make thread safe|使用互锁，成为线程安全型的应用|
+|Use mutex to make thread safe| * 在 2.1.0 版本中移除，而使用了临界区|
 |Use heap with the easyblink daemon thread stack created|LED守护线程栈使用系统动态堆内存|
 
-### Nano 版：
-[点击进入 Nano 版](../../tree/nano/)
+### Nano 版使用：
 
-Nano 版直接拷贝 easyblink.h 和 easyblink.c 到用户文件夹，然后要确保开启宏 RT_USING_SEMAPHORE，再自己配置几个宏定义：  
+Nano 版需要简单移植 GPIO 部分组件（rt_pin_mode/rt_pin_read/rt_pin_write），直接拷贝 easyblink.h 和 easyblink.c 到用户文件夹，然后要确保开启宏 RT_USING_SEMAPHORE，自己再在 `rtconfig.h` 中配置几个宏：
 
-|宏|描述|
-|----|----|
+|  宏  |  描述  |
+|------|--------|
+|PKG_USING_EASYBLINK|使用软件包|
 |PKG_EASYBLINK_MAX_LED_NUMS|定义 LED 数目|
 |PKG_EASYBLINK_USING_MSH_CMD|定义可以在控制台使用 eblink 进行LED的闪烁测试|
-|PKG_EASYBLINK_USING_MUTEX|使用互锁，成为线程安全型应用，确保开启 RT_USING_MUTEX 。对只有少量的LED，闪烁频次不是很高，并且都是同一个线程控制的话，觉得不是非常必要。|
 |PKG_EASYBLINK_USING_HEAP|LED的守护线程栈使用系统的动态堆内存，确保开启 RT_USING_HEAP，否则，在编译时就自动分配好内存。|
 
 ## API 简介
 
 `ebled_t easyblink_init_led(rt_base_t rt_pin, rt_base_t active_level)`
 
-easyblink 的初始化函数，每个 LED 使用前必须先初始化，V2.0.0 新增。  
+easyblink 的初始化函数，每个 LED 使用前必须先初始化，V2.0.0 新增。
 
 |参数|描述|
 |----|----|
@@ -61,7 +60,8 @@ easyblink 的初始化函数，每个 LED 使用前必须先初始化，V2.0.0 �
 
 `ebled_t easyblink_init(GPIO_TypeDef *port, rt_uint16_t pin, GPIO_PinState active_level)`
 
-easyblink 的初始化函数，每个 LED 使用前必须先初始化，为了兼容 V1.0.0 而保留的，只支持 STM32 MCU。  
+easyblink 的初始化函数，每个 LED 使用前必须先初始化，为了兼容 V1.0.0 而保留的，只支持 STM32 MCU。
+注意：在 2.1.0 版本中已移除。
 
 |参数|描述|
 |----|----|
@@ -76,8 +76,6 @@ easyblink 的初始化函数，每个 LED 使用前必须先初始化，为了�
  * @fn      easyblink
  *
  * @brief   以给定的次数、脉宽和周期闪烁LED。
- *          若要在中断中使用 easyblink，并开了互锁，请把宏 PKG_EASYBLINK_WAIT_MUTEX_TICK 设为 0 吧，
- *          漏掉一次不闪就一次不闪吧，只是LED指示，无所谓的，还是中断的实时性重要。
  *
  * @param   led         - LED句柄
  *          nums        - LED闪烁次数，-1为无限次
@@ -95,10 +93,10 @@ void easyblink(ebled_t led, rt_int16_t nums, rt_uint16_t pulse, rt_uint16_t peri
 |nums|闪烁次数，-1 为一直闪烁|
 |pulse|LED 闪烁时点亮LED的脉冲宽度，以毫秒为单位|
 |period|LED 闪烁周期，亮和暗即一个完整的周期|
- 
- 当前LED正在闪烁时，如果这时LED再调用一次 easyblink()，若当前LED的nums为-1（即一直闪烁），则会打断当前LED的闪烁，先关闭LED 500ms，然后使用新的参数进行闪烁，闪烁好了后，会再关闭LED 5000ms，再恢复原来的LED参数继续闪烁，关断LED的前后时间可以在 easyblink.h 里调整设置。否则，会保存参数在后备区，等当前的闪烁完了后，接着以新的参数闪烁。  
- 因为只有一个后备区，因此当后备区有待闪烁的参数时，再次调用 easyblink()，原来后备区的参数将丢失，代之于新的参数。  
- 若要在中断中使用 `easyblink()`，并开了互锁，请把宏 PKG_EASYBLINK_WAIT_MUTEX_TICK 设为 0 ，漏掉一次不闪就一次不闪吧，只是LED指示，无所谓的，还是中断的实时性重要。
+
+ 当前LED正在闪烁时，如果这时LED再调用一次 easyblink()，若当前LED的nums为-1（即一直闪烁），则会打断当前LED的闪烁，先关闭LED 500ms，然后使用新的参数进行闪烁，闪烁好了后，会再关闭LED 5000ms，再恢复原来的LED参数继续闪烁，关断LED的前后时间可以在 easyblink.h 里调整设置。否则，会保存参数在后备区，等当前的闪烁完了后，接着以新的参数闪烁。
+ 因为只有一个后备区，因此当后备区有待闪烁的参数时，再次调用 easyblink()，原来后备区的参数将丢失，代之于新的参数。
+ v2.1.0 及以后支持在中断 ISA 中使用 `easyblink()`。
 
 `void easyblink_stop(ebled_t led)`
 
@@ -114,7 +112,7 @@ void easyblink(ebled_t led, rt_int16_t nums, rt_uint16_t pulse, rt_uint16_t peri
 
 `void eb_led_toggle(ebled_t led)`
 
-翻转 LED 。  
+翻转 LED 。
 
 ## 使用示例
 

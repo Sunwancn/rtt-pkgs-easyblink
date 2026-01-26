@@ -19,13 +19,6 @@
 extern "C" {
 #endif
 
-/* 可以使用MSH控制台手动控制LED闪烁 */
-//#define PKG_EASYBLINK_USING_MSH_CMD
-/* 使用MUTEX互锁，线程安全，一般情况下不需要使用 */
-//#define PKG_EASYBLINK_USING_MUTEX
-/* 使用系统的动态堆来创建线程栈 */
-//#define PKG_EASYBLINK_USING_HEAP
-
 /* 可控制的最大LED数目 */
 #ifndef PKG_EASYBLINK_MAX_LED_NUMS
 #define PKG_EASYBLINK_MAX_LED_NUMS          1
@@ -34,11 +27,9 @@ extern "C" {
 /* 线程栈相关配置 */
 #define PKG_EASYBLINK_THREAD_PRIORITY       (RT_THREAD_PRIORITY_MAX - 2)
 #define PKG_EASYBLINK_THREAD_STACK_SIZE     256
-#define PKG_EASYBLINK_THREAD_TIMESLICE      (RT_TICK_PER_SECOND / 20)  /* 50ms */
+#define PKG_EASYBLINK_THREAD_TIMESLICE      (RT_TICK_PER_SECOND / 20)   /* 50ms */
 
-/* 若在中断中使用 easyblink，并开了互锁，请把宏 PKG_EASYBLINK_WAIT_MUTEX_TICK 设为 0 吧，
- * 漏掉一次不闪就一次不闪吧，只是LED指示，无所谓的，还是中断的实时性重要。*/
-#define PKG_EASYBLINK_WAIT_MUTEX_TICK       2U
+#define PKG_EASYBLINK_WAIT_MUTEX_TICK       10U
 #define PKG_EASYBLINK_WAIT_MAX_TICK         ((RT_TICK_MAX / 2) - 1)
 
 /* 将一个LED闪烁系列从前台转向后台时，LED闪烁切换开始前的关断时间，毫秒 */
@@ -51,10 +42,10 @@ extern "C" {
 #define PKG_EASYBLINK_CORRECT               0x04
 #define PKG_EASYBLINK_LED_SHOULD_ON         0x08
 
-#define __EASYBLINK_IS_FLAG(__LEDPTR__, __FLAG__) ((__LEDPTR__)->flag & (__FLAG__))
-#define __EASYBLINK_SET_FLAG(__LEDPTR__, __FLAG__) ((__LEDPTR__)->flag |= (__FLAG__))
-#define __EASYBLINK_CLEAR_FLAG(__LEDPTR__, __FLAG__) ((__LEDPTR__)->flag &= ~(__FLAG__))
-#define __EASYBLINK_MS_TO_TICK(__MS__) ((__MS__) * RT_TICK_PER_SECOND / 1000U)
+#define EASYBLINK_IS_FLAG(_pled, _flag)     ((_pled)->flag & (_flag))
+#define EASYBLINK_SET_FLAG(_pled, _flag)    ((_pled)->flag |= (_flag))
+#define EASYBLINK_CLEAR_FLAG(_pled, _flag)  ((_pled)->flag &= ~(_flag))
+#define EASYBLINK_MS_TO_TICK(_ms)           ((_ms) * RT_TICK_PER_SECOND / 1000U)
 
 struct easyblink_data
 {
