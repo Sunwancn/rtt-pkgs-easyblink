@@ -7,32 +7,32 @@
  * Date           Author       Notes
  * 2020-01-15     Sunwancn     the first version
  * 2020-04-01     Sunwancn     Version 2.0.0
+ * 2026-01-25     Sunwancn     Version 2.1.0
  */
 
 #include <rtthread.h>
 #include <rtdevice.h>
 #include "easyblink.h"
 
+#ifdef PKG_USING_EASYBLINK
+
 #if !defined(PKG_EASYBLINK_MAX_LED_NUMS) || (PKG_EASYBLINK_MAX_LED_NUMS == 0)
 #error "Please define at least one PKG_EASYBLINK_MAX_LED_NUMS"
 #endif
 
 #ifndef PKG_EASYBLINK_USING_HEAP
+#ifndef ALIGN
+#define ALIGN   rt_align
+#endif
 ALIGN(RT_ALIGN_SIZE)
 static char eb_thread_stack[PKG_EASYBLINK_THREAD_STACK_SIZE];
 static struct rt_thread eb_thread_struct = {0};
 static struct rt_semaphore eb_semaphore = {0};
-#if defined(RT_USING_MUTEX) && defined(PKG_EASYBLINK_USING_MUTEX)
-static struct rt_mutex eb_mutex_struct = {0};
-#endif
-#endif /* PKG_EASYBLINK_USING_HEAP */
+#endif /* ! PKG_EASYBLINK_USING_HEAP */
 
 static struct easyblink_data eb_leds[PKG_EASYBLINK_MAX_LED_NUMS] = {0};
 static rt_thread_t eb_thread = RT_NULL;
 static rt_sem_t eb_sem = RT_NULL;
-#if defined(RT_USING_MUTEX) && defined(PKG_EASYBLINK_USING_MUTEX)
-static rt_mutex_t eb_mutex = RT_NULL;
-#endif
 
 static void led_blink_delay(ebled_t led, rt_uint16_t delay);
 static void blink_data_set(ebled_t led, rt_int16_t nums, rt_uint16_t pulse, rt_uint16_t period);
@@ -58,9 +58,9 @@ ebled_t easyblink_init_led(rt_base_t led_pin, rt_base_t active_level)
     for (i = 0; i < PKG_EASYBLINK_MAX_LED_NUMS; i++)
     {
         led = &eb_leds[i];
-        if (!__EASYBLINK_IS_FLAG(led, PKG_EASYBLINK_INIT))
+        if (!EASYBLINK_IS_FLAG(led, PKG_EASYBLINK_INIT))
         {
-            __EASYBLINK_SET_FLAG(led, PKG_EASYBLINK_INIT);
+            EASYBLINK_SET_FLAG(led, PKG_EASYBLINK_INIT);
 
             led->led_pin = led_pin;
             led->active_level = active_level;
@@ -68,9 +68,17 @@ ebled_t easyblink_init_led(rt_base_t led_pin, rt_base_t active_level)
             rt_pin_mode(led_pin, PIN_MODE_OUTPUT);
             rt_pin_write(led_pin, !active_level);
 
-            /* 若 easyBlink 守护线程未创建或已关闭，则创建 */
-            if (eb_thread == RT_NULL || eb_thread->stat == RT_THREAD_CLOSE)
+            /* 若 easyBlink 守护线程未创建，则创建 */
+            if (eb_thread == RT_NULL)
             {
+#if defined(RT_USING_HEAP) && defined(PKG_EASYBLINK_USING_HEAP)
+                eb_sem = rt_sem_create("eb_sem", 0, RT_IPC_FLAG_FIFO);
+#else
+                eb_sem = &eb_semaphore;
+                rt_sem_init(eb_sem, "eb_sem", 0, RT_IPC_FLAG_FIFO);
+#endif
+                RT_ASSERT(eb_sem);
+
 #if defined(RT_USING_HEAP) && defined(PKG_EASYBLINK_USING_HEAP)
                 eb_thread = rt_thread_create("ebThread", eb_daemon_thread_entry, RT_NULL,
                                              PKG_EASYBLINK_THREAD_STACK_SIZE, PKG_EASYBLINK_THREAD_PRIORITY, PKG_EASYBLINK_THREAD_TIMESLICE);
@@ -81,67 +89,19 @@ ebled_t easyblink_init_led(rt_base_t led_pin, rt_base_t active_level)
 #endif
                 RT_ASSERT(eb_thread);
                 rt_thread_startup(eb_thread);
-
-#if defined(RT_USING_HEAP) && defined(PKG_EASYBLINK_USING_HEAP)
-                eb_sem = rt_sem_create("eb_sem", 0, RT_IPC_FLAG_FIFO);
-#else
-                eb_sem = &eb_semaphore;
-                rt_sem_init(eb_sem, "eb_sem", 0, RT_IPC_FLAG_FIFO);
-#endif
-                RT_ASSERT(eb_sem);
-
-#if defined(RT_USING_MUTEX) && defined(PKG_EASYBLINK_USING_MUTEX)
-#if defined(RT_USING_HEAP) && defined(PKG_EASYBLINK_USING_HEAP)
-                eb_mutex = rt_mutex_create("eb_mutex", RT_IPC_FLAG_FIFO);
-#else
-                eb_mutex = &eb_mutex_struct;
-                rt_mutex_init(eb_mutex, "eb_mutex", RT_IPC_FLAG_FIFO);
-#endif
-                RT_ASSERT(eb_mutex);
-#endif /* defined(RT_USING_MUTEX) && defined(PKG_EASYBLINK_USING_MUTEX) */
             }
 
             break;
         }
     }
 
+    if (i == PKG_EASYBLINK_MAX_LED_NUMS)
+    {
+        return RT_NULL;
+    }
+
     return led;
 }
-
-#ifdef SOC_FAMILY_STM32
-/***************************************************************************************************
- * @fn      easyblink_init
- *
- * @brief   STM32 初始化 LED
- *
- * @param   port         - GPIOx
- *          pin          - GPIO_PIN_0 - GPIO_PIN_15
- *          active_level - 点亮LED的有效电平，GPIO_PIN_RESET 或 GPIO_PIN_SET
- *
- * @return  ebled_t类型指针，若 init 次数超出最大LED数目，返回空指针
- ***************************************************************************************************/
-ebled_t easyblink_init(GPIO_TypeDef *port, rt_uint16_t pin, GPIO_PinState active_level)
-{
-    rt_base_t lpin = 0;
-    rt_base_t alevel;
-
-    RT_ASSERT(pin > 0);
-
-    do
-    {
-        if (pin & 1U)
-            break;
-        pin >>= 1;
-        lpin++;
-    }
-    while(lpin < 16);
-
-    lpin += (rt_base_t)(16 * (((rt_base_t)port - (rt_base_t)GPIOA_BASE) / (0x0400UL)));
-    alevel = (rt_base_t)active_level;
-
-    return easyblink_init_led(lpin, alevel);
-}
-#endif /* SOC_FAMILY_STM32 */
 
 /***************************************************************************************************
  * @fn      easyblink_deinit
@@ -165,7 +125,7 @@ void easyblink_deinit(ebled_t led)
     for (i = 0; i < PKG_EASYBLINK_MAX_LED_NUMS; i++)
     {
         led = &eb_leds[i];
-        if (__EASYBLINK_IS_FLAG(led, PKG_EASYBLINK_INIT))
+        if (EASYBLINK_IS_FLAG(led, PKG_EASYBLINK_INIT))
         {
             noled = RT_FALSE;
             break;
@@ -174,26 +134,6 @@ void easyblink_deinit(ebled_t led)
 
     if (noled)
     {
-#if defined(RT_USING_MUTEX) && defined(PKG_EASYBLINK_USING_MUTEX)
-        if (eb_mutex != RT_NULL)
-        {
-#if defined(RT_USING_HEAP) && defined(PKG_EASYBLINK_USING_HEAP)
-            rt_mutex_delete(eb_mutex);
-#else
-            rt_mutex_detach(eb_mutex);
-#endif
-            eb_mutex = RT_NULL;
-        }
-#endif /* defined(RT_USING_MUTEX) && defined(PKG_EASYBLINK_USING_MUTEX) */
-        if (eb_sem != RT_NULL)
-        {
-#if defined(RT_USING_HEAP) && defined(PKG_EASYBLINK_USING_HEAP)
-            rt_sem_delete(eb_sem);
-#else
-            rt_sem_detach(eb_sem);
-#endif
-            eb_sem = RT_NULL;
-        }
         if (eb_thread != RT_NULL)
         {
 #if defined(RT_USING_HEAP) && defined(PKG_EASYBLINK_USING_HEAP)
@@ -203,6 +143,15 @@ void easyblink_deinit(ebled_t led)
 #endif
             eb_thread = RT_NULL;
         }
+        if (eb_sem != RT_NULL)
+        {
+#if defined(RT_USING_HEAP) && defined(PKG_EASYBLINK_USING_HEAP)
+            rt_sem_delete(eb_sem);
+#else
+            rt_sem_detach(eb_sem);
+#endif
+            eb_sem = RT_NULL;
+        }
     }
 }
 
@@ -210,8 +159,6 @@ void easyblink_deinit(ebled_t led)
  * @fn      easyblink
  *
  * @brief   以给定的次数、脉宽和周期闪烁LED。
- *          若要在中断中使用 easyblink，并开了互锁，请把宏 PKG_EASYBLINK_WAIT_MUTEX_TICK 设为 0 吧，
- *          漏掉一次不闪就一次不闪吧，只是LED指示，无所谓的，还是中断的实时性重要。
  *
  * @param   led         - LED句柄
  *          nums        - LED闪烁次数，-1为无限次
@@ -225,40 +172,35 @@ void easyblink(ebled_t led, rt_int16_t nums, rt_uint16_t pulse, rt_uint16_t peri
     RT_ASSERT(led);
     RT_ASSERT(pulse <= period);
 
-#if defined(RT_USING_MUTEX) && defined(PKG_EASYBLINK_USING_MUTEX)
-    if (rt_mutex_take(eb_mutex, PKG_EASYBLINK_WAIT_MUTEX_TICK) == RT_EOK)
-#endif
+    rt_base_t level = rt_hw_interrupt_disable();
+
+    if (led->nums == -1 && nums > 0)
     {
-        if (led->nums == -1 && nums > 0)
-        {
-            /* 原先若是无限次闪烁，原先的LED闪烁参数压入后备区 */
-            led->nums_bak = led->nums;
-            led->pulse_bak = led->pulse;
-            led->npulse_bak = led->npulse;
+        /* 原先若是无限次闪烁，原先的LED闪烁参数压入后备区 */
+        led->nums_bak = led->nums;
+        led->pulse_bak = led->pulse;
+        led->npulse_bak = led->npulse;
 
-            eb_led_off(led);
+        eb_led_off(led);
 
-            blink_data_set(led, nums, pulse, period);
-            led_blink_delay(led, PKG_EASYBLINK_WAIT_MS_START);
-        }
-        else if (__EASYBLINK_IS_FLAG(led, PKG_EASYBLINK_ACTIVE))
-        {
-            /* 原先的LED还在闪烁，参数压入后备区，等待闪烁 */
-            led->nums_bak = nums;
-            led->pulse_bak = __EASYBLINK_MS_TO_TICK(pulse);
-            led->npulse_bak = __EASYBLINK_MS_TO_TICK(period - pulse);
-        }
-        else
-        {
-            /* 立刻开始闪烁 */
-            blink_data_set(led, nums, pulse, period);
-            led_blink_delay(led, 0);
-        }
-
-#if defined(RT_USING_MUTEX) && defined(PKG_EASYBLINK_USING_MUTEX)
-        rt_mutex_release(eb_mutex);
-#endif
+        blink_data_set(led, nums, pulse, period);
+        led_blink_delay(led, PKG_EASYBLINK_WAIT_MS_START);
     }
+    else if (EASYBLINK_IS_FLAG(led, PKG_EASYBLINK_ACTIVE))
+    {
+        /* 原先的LED还在闪烁，参数压入后备区，等待闪烁 */
+        led->nums_bak = nums;
+        led->pulse_bak = EASYBLINK_MS_TO_TICK(pulse);
+        led->npulse_bak = EASYBLINK_MS_TO_TICK(period - pulse);
+    }
+    else
+    {
+        /* 立刻开始闪烁 */
+        blink_data_set(led, nums, pulse, period);
+        led_blink_delay(led, 0);
+    }
+
+    rt_hw_interrupt_enable(level);
 }
 
 /***************************************************************************************************
@@ -277,17 +219,17 @@ void easyblink_stop(ebled_t led)
     eb_led_off(led);
 
     led->nums_bak = led->pulse_bak = led->npulse_bak = 0;
-    __EASYBLINK_CLEAR_FLAG(led, PKG_EASYBLINK_ACTIVE);
+    EASYBLINK_CLEAR_FLAG(led, PKG_EASYBLINK_ACTIVE);
 }
 
-/* Seting the LED data */
+/* Set the LED data */
 void blink_data_set(ebled_t led, rt_int16_t nums, rt_uint16_t pulse, rt_uint16_t period)
 {
     RT_ASSERT(led);
 
     led->nums = nums;
-    led->pulse = __EASYBLINK_MS_TO_TICK(pulse);
-    led->npulse = __EASYBLINK_MS_TO_TICK(period - pulse);
+    led->pulse = EASYBLINK_MS_TO_TICK(pulse);
+    led->npulse = EASYBLINK_MS_TO_TICK(period - pulse);
 }
 
 /* LED relaese the semaphore to blink or blink delay */
@@ -295,8 +237,8 @@ void led_blink_delay(ebled_t led, rt_uint16_t delay)
 {
     RT_ASSERT(led);
 
-    led->ticks = __EASYBLINK_MS_TO_TICK(delay);
-    __EASYBLINK_SET_FLAG(led, PKG_EASYBLINK_LED_SHOULD_ON | PKG_EASYBLINK_ACTIVE | PKG_EASYBLINK_CORRECT);
+    led->ticks = EASYBLINK_MS_TO_TICK(delay);
+    EASYBLINK_SET_FLAG(led, PKG_EASYBLINK_LED_SHOULD_ON | PKG_EASYBLINK_ACTIVE | PKG_EASYBLINK_CORRECT);
 
     rt_sem_release(eb_sem);
 }
@@ -365,18 +307,16 @@ void eb_daemon_thread_entry(void *parameter)
             wait_tick = correct_or_get_min_ticks(tick, RT_TRUE);
         }
 
-#if defined(RT_USING_MUTEX) && defined(PKG_EASYBLINK_USING_MUTEX)
-        rt_mutex_take(eb_mutex, RT_WAITING_FOREVER);
-#endif
-
         for (i = 0; i < PKG_EASYBLINK_MAX_LED_NUMS; i++)
         {
             led = &eb_leds[i];
 
+            rt_enter_critical();
+
             led->ticks -= wait_tick;
-            if (__EASYBLINK_IS_FLAG(led, PKG_EASYBLINK_ACTIVE) && led->ticks <= 0)
+            if (EASYBLINK_IS_FLAG(led, PKG_EASYBLINK_ACTIVE) && led->ticks <= 0)
             {
-                if (__EASYBLINK_IS_FLAG(led, PKG_EASYBLINK_LED_SHOULD_ON))
+                if (EASYBLINK_IS_FLAG(led, PKG_EASYBLINK_LED_SHOULD_ON))
                 {
                     /* 这个时间点应该 LED ON */
                     if ((led->nums > 0) || (led->nums == -1))
@@ -384,7 +324,7 @@ void eb_daemon_thread_entry(void *parameter)
                         /* LED还有闪烁次数或无限次 */
                         eb_led_on(led);
                         /* 下一个时间点将关闭LED */
-                        __EASYBLINK_CLEAR_FLAG(led, PKG_EASYBLINK_LED_SHOULD_ON);
+                        EASYBLINK_CLEAR_FLAG(led, PKG_EASYBLINK_LED_SHOULD_ON);
                         led->ticks = led->pulse;
                     }
                     else
@@ -400,13 +340,13 @@ void eb_daemon_thread_entry(void *parameter)
                             led->ticks = 0;
                             if (led->nums == -1)
                             {
-                                led->ticks = __EASYBLINK_MS_TO_TICK(PKG_EASYBLINK_WAIT_MS_END);
+                                led->ticks = EASYBLINK_MS_TO_TICK(PKG_EASYBLINK_WAIT_MS_END);
                             }
                         }
                         else
                         {
                             /* LED闪烁任务结束 */
-                            __EASYBLINK_CLEAR_FLAG(led, PKG_EASYBLINK_ACTIVE);
+                            EASYBLINK_CLEAR_FLAG(led, PKG_EASYBLINK_ACTIVE);
                         }
                     }
                 }
@@ -415,16 +355,15 @@ void eb_daemon_thread_entry(void *parameter)
                     /* 这个时间点应该 LED OFF */
                     eb_led_off(led);
                     /* 下一个时间点将点亮LED */
-                    __EASYBLINK_SET_FLAG(led, PKG_EASYBLINK_LED_SHOULD_ON);
+                    EASYBLINK_SET_FLAG(led, PKG_EASYBLINK_LED_SHOULD_ON);
                     led->ticks = led->npulse;
                     if (led->nums > 0)
                         led->nums --;
                 }
             }
+
+            rt_exit_critical();
         }
-#if defined(RT_USING_MUTEX) && defined(PKG_EASYBLINK_USING_MUTEX)
-        rt_mutex_release(eb_mutex);
-#endif
     }
 }
 
@@ -435,34 +374,31 @@ rt_tick_t correct_or_get_min_ticks(rt_tick_t tick, rt_bool_t corr)
     ebled_t led = RT_NULL;
     rt_int32_t tick_min = PKG_EASYBLINK_WAIT_MAX_TICK;
 
-#if defined(RT_USING_MUTEX) && defined(PKG_EASYBLINK_USING_MUTEX)
-    rt_mutex_take(eb_mutex, RT_WAITING_FOREVER);
-#endif
-
     if (corr)
         tick = rt_tick_get() - tick;
 
     for (i = 0; i < PKG_EASYBLINK_MAX_LED_NUMS; i++)
     {
         led = &eb_leds[i];
-        if (__EASYBLINK_IS_FLAG(led, PKG_EASYBLINK_ACTIVE))
+
+        if (EASYBLINK_IS_FLAG(led, PKG_EASYBLINK_ACTIVE))
         {
+            rt_enter_critical();
+
             if (corr)
             {
-                if (__EASYBLINK_IS_FLAG(led, PKG_EASYBLINK_CORRECT))
-                    __EASYBLINK_CLEAR_FLAG(led, PKG_EASYBLINK_CORRECT);
+                if (EASYBLINK_IS_FLAG(led, PKG_EASYBLINK_CORRECT))
+                    EASYBLINK_CLEAR_FLAG(led, PKG_EASYBLINK_CORRECT);
                 else
                     led->ticks -= tick;
             }
 
             if (led->ticks < tick_min)
                 tick_min = led->ticks;
+
+            rt_exit_critical();
         }
     }
-
-#if defined(RT_USING_MUTEX) && defined(PKG_EASYBLINK_USING_MUTEX)
-    rt_mutex_release(eb_mutex);
-#endif
 
     return (rt_tick_t)((tick_min < 0) ? 0 : tick_min);
 }
@@ -488,7 +424,7 @@ static void __easyblink(rt_uint8_t argc, char **argv)
             return;
         }
         led = &eb_leds[init_num];
-        if (! led || ! __EASYBLINK_IS_FLAG(led, PKG_EASYBLINK_INIT))
+        if (! led || ! EASYBLINK_IS_FLAG(led, PKG_EASYBLINK_INIT))
         {
             rt_kprintf("Not initialized! Must be initialize first.\n");
             return;
@@ -525,3 +461,6 @@ static void __easyblink(rt_uint8_t argc, char **argv)
 }
 MSH_CMD_EXPORT_ALIAS(__easyblink, eblink, Blink the LED easily);
 #endif /* defined(RT_USING_FINSH) && defined(PKG_EASYBLINK_USING_MSH_CMD) */
+
+#endif /* PKG_USING_EASYBLINK */
+
